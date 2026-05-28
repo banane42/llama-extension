@@ -54,7 +54,7 @@ if (Test-Path $GdExt) {
     Copy-Item $GdExt $GameBin -Force
     Write-Host "  Copied: llama_ext.gdextension" -ForegroundColor DarkGray
 } else {
-    Write-Warning "  .gdextension not found at $GdExt — skipping"
+    Write-Warning "  .gdextension not found at $GdExt - skipping"
 }
 
 Write-Host "Deploy complete." -ForegroundColor Green
