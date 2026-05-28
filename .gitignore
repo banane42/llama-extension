@@ -1,0 +1,34 @@
+# ── Build outputs ─────────────────────────────────────────────────────────────
+demo/bin/*.dll
+demo/bin/*.lib
+demo/bin/*.exp
+demo/bin/*.pdb
+
+# Keep the .gdextension descriptor — it's config, not a build artifact
+!demo/bin/llama_ext.gdextension
+
+# ── godot-cpp build artifacts ─────────────────────────────────────────────────
+godot-cpp/bin/
+godot-cpp/.sconsign.dblite
+
+# ── llama.cpp build artifacts ─────────────────────────────────────────────────
+llama.cpp/build/
+
+# ── SCons cache ───────────────────────────────────────────────────────────────
+.sconsign.dblite
+.scons_temp/
+
+# ── VS / MSVC ─────────────────────────────────────────────────────────────────
+.vs/
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+
+# ── VSCode ────────────────────────────────────────────────────────────────────
+.vscode/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+Thumbs.db
+desktop.ini
+.DS_Store
