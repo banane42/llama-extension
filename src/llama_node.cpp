@@ -2,11 +2,13 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <vector>
+#include <string>
 
 // llama.cpp C API
 #include "llama.h"
 #include "ggml.h"
 
+using namespace std;
 using namespace godot;
 
 void LlamaNode::_bind_methods() {
@@ -17,6 +19,10 @@ void LlamaNode::_bind_methods() {
                          &LlamaNode::generate, DEFVAL(256));
     ClassDB::bind_method(D_METHOD("generate_sync", "prompt", "max_tokens"),
                          &LlamaNode::generate_sync, DEFVAL(256));
+
+    ClassDB::bind_method(D_METHOD("set_system_prompt", "prompt"), &LlamaNode::set_system_prompt);
+    ClassDB::bind_method(D_METHOD("get_system_prompt"), &LlamaNode::get_system_prompt);
+    ADD_PROPERTY(PropertyInfo(Variant::STRING, "system_prompt", PROPERTY_HINT_MULTILINE_TEXT), "set_system_prompt", "get_system_prompt");
 
     ADD_SIGNAL(MethodInfo("generation_completed",
                           PropertyInfo(Variant::STRING, "text")));
@@ -69,13 +75,21 @@ void LlamaNode::unload_model() {
 }
 
 // ── Core generation logic (shared by sync and async) ──────────────────────────
-static String run_inference(llama_model *model, llama_context *ctx,
-                            const String &prompt, int max_tokens) {
-    if (!model || !ctx) return "";
+String LlamaNode::_run_inference(const String &prompt, int max_tokens) {
+    if (!LlamaNode::_model || !LlamaNode::_ctx) return "";
 
-    const llama_vocab *vocab = llama_model_get_vocab(model);
-    std::string p = prompt.utf8().get_data();
+    const llama_vocab *vocab = llama_model_get_vocab(LlamaNode::_model);
 
+    std::string prompt_str = prompt.utf8().get_data();
+    std::string sys_str = _system_prompt.utf8().get_data();
+
+    std::string p =
+        "<|im_start|>system\n"
+        + sys_str + "<|im_end|>\n"
+        "<|im_start|>user\n"
+        + prompt_str +
+        "<|im_end|>\n"
+        "<|im_start|>assistant\n";
     // Tokenize
     int n_prompt = -llama_tokenize(vocab, p.c_str(), p.size(),
                                    nullptr, 0, true, true);
@@ -88,12 +102,16 @@ static String run_inference(llama_model *model, llama_context *ctx,
 
     std::string result;
     llama_sampler *sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
-    llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(40));
+    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(0.95f, 1));
+    llama_sampler_chain_add(sampler, llama_sampler_init_temp(0.7f));
+    llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
+    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, 1.1f, 0.0f, 0.0f));
 
     for (int i = 0; i < max_tokens; i++) {
-        if (llama_decode(ctx, batch)) break;
+        if (llama_decode(LlamaNode::_ctx, batch)) break;
 
-        llama_token new_token = llama_sampler_sample(sampler, ctx, -1);
+        llama_token new_token = llama_sampler_sample(sampler, LlamaNode::_ctx, -1);
         if (llama_vocab_is_eog(vocab, new_token)) break;
 
         char buf[256] = {};
@@ -105,13 +123,13 @@ static String run_inference(llama_model *model, llama_context *ctx,
     }
 
     llama_sampler_free(sampler);
-	llama_memory_clear(llama_get_memory(ctx), true);
+	llama_memory_clear(llama_get_memory(LlamaNode::_ctx), true);
     return String(result.c_str());
 }
 
 // ── Async ──────────────────────────────────────────────────────────────────────
 void LlamaNode::_do_generate(String prompt, int max_tokens) {
-    String result = run_inference(_model, _ctx, prompt, max_tokens);
+    String result = LlamaNode::_run_inference(prompt, max_tokens);
     // Emit signal back on the main thread via call_deferred
     call_deferred("emit_signal", "generation_completed", result);
     _running = false;
@@ -134,5 +152,5 @@ void LlamaNode::generate(String prompt, int max_tokens) {
 // ── Sync ───────────────────────────────────────────────────────────────────────
 String LlamaNode::generate_sync(String prompt, int max_tokens) {
     if (!_model) return "";
-    return run_inference(_model, _ctx, prompt, max_tokens);
+    return LlamaNode::_run_inference(prompt, max_tokens);
 }

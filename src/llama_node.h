@@ -19,12 +19,16 @@ private:
     std::thread    _worker;
     std::atomic<bool> _running{false};
 
+    // use {prompt}
+    String _system_prompt = "You are a helpful assistant.";
+
     // Params cached at load time
     String _model_path;
     int    _n_gpu_layers = 0;
     int    _n_ctx        = 2048;
 
     void _do_generate(String prompt, int max_tokens);
+    String _run_inference(const String &prompt, int max_tokens);
 
 protected:
     static void _bind_methods();
@@ -42,6 +46,11 @@ public:
 
     // Sync version if you want it for simple tests
     String generate_sync(String prompt, int max_tokens = 256);
+
+    // Get/Set _system_prompt
+    void set_system_prompt(String prompt) { _system_prompt = prompt; }
+    String get_system_prompt() const { return _system_prompt; }
+
 };
 
 } // namespace godot
