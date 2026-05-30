@@ -1,18 +1,38 @@
 #include "register_types.h"
 #include "llama_node.h"
+#include "llama_server.h"
 #include <gdextension_interface.h>
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
+#include <godot_cpp/classes/engine.hpp>
 
 using namespace godot;
 
+// Singleton instance — created at init, destroyed at uninit
+static LlamaServer *_llama_server = nullptr;
+
 void initialize_llama_module(ModuleInitializationLevel p_level) {
     if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) return;
+
+    // LLama Node
     ClassDB::register_class<LlamaNode>();
+
+    // LLama Server
+    ClassDB::register_class<LlamaServer>();
+ 
+    // Instantiate and register as an engine singleton so GDScript can access
+    // it via LlamaServer.generate() without any scene setup
+    _llama_server = memnew(LlamaServer);
+    Engine::get_singleton()->register_singleton("LlamaServer", _llama_server);
 }
 
 void uninitialize_llama_module(ModuleInitializationLevel p_level) {
     if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) return;
+
+    // LLama Server
+    Engine::get_singleton()->unregister_singleton("LlamaServer");
+    memdelete(_llama_server);
+    _llama_server = nullptr;
 }
 
 extern "C" {
