@@ -4,6 +4,8 @@
 #include <thread>
 #include <atomic>
 
+#include "llama_sampler_chain.h"
+
 struct llama_model;
 struct llama_context;
 
@@ -24,26 +26,28 @@ private:
 
     // ── Config ────────────────────────────────────────────────────────────────
     String _model_path;
-    int    _max_tokens   = 256;
+    int    _max_tokens = 256;
 
-    // Sampler settings
-    int   _top_k        = 40;
-    float _top_p        = 0.95f;
-    float _temperature  = 0.7f;
+    // The server-level default sampler chain. Must be set explicitly before any
+    // generation call that does not supply its own chain — no hidden fallback exists.
+    Ref<LlamaSamplerChain> _default_sampler_chain;
 
-    // Penalty settings
-    int   _penalty_last_n   = 64;
-    float _penalty_repeat   = 1.1f;
-
-    // System prompt — use {prompt} as the placeholder for user input
+    // System prompt — use {prompt} as the placeholder for user input.
     String _system_prompt =
         "<|im_start|>system\n"
         "You are a helpful assistant.<|im_end|>\n"
         "{prompt}";
 
     // ── Internal ──────────────────────────────────────────────────────────────
-    String _run_inference(const String &prompt);
-    void   _do_generate(String prompt);
+
+    // Resolve which chain to use for a call: prefer `override_chain` when valid,
+    // fall back to `_default_sampler_chain`, or emit an error and return nullptr.
+    // Returns a freshly-built llama_sampler* the caller must free, or nullptr on error.
+    llama_sampler *_resolve_sampler_chain(const Ref<LlamaSamplerChain> &override_chain);
+
+    // prompt is the raw user text; chain must be non-null (validated by callers).
+    String _run_inference(const String &prompt, llama_sampler *chain);
+    void   _do_generate(String prompt, Ref<LlamaSamplerChain> chain);
     String _build_prompt(const String &user_prompt) const;
 
 protected:
@@ -58,43 +62,41 @@ public:
     // ── Model lifecycle ───────────────────────────────────────────────────────
 
     /**
-     * @brief loads model
-     * @param model_path path to the gguf model to be loaded
-     * @param n_gpu_layer number of gpu layers to use, -1 to configure to system defaults
-     * @param n_ctx Size of context window, 0 for model default
+     * @brief Load a GGUF model from disk.
+     * @param model_path  Path to the .gguf file.
+     * @param n_gpu_layers Number of layers to offload to GPU. -1 = system default.
+     * @param n_ctx        Context window size. 0 = model default.
      */
     bool load_model(String model_path, int n_gpu_layers = -1, int n_ctx = 0);
     void unload_model();
     bool is_model_loaded() const { return _model != nullptr; }
 
     // ── Generation ────────────────────────────────────────────────────────────
-    void   generate(String prompt);           // async — emits generation_completed
-    String generate_sync(String prompt);      // blocking
+
+    /// Async generation. Emits generation_completed or generation_failed.
+    /// Pass a LlamaSamplerChain to override the server default for this call only.
+    void generate(String prompt,
+                  Ref<LlamaSamplerChain> chain = Ref<LlamaSamplerChain>());
+
+    /// Blocking generation. Returns empty string on error.
+    /// Pass a LlamaSamplerChain to override the server default for this call only.
+    String generate_sync(String prompt,
+                         Ref<LlamaSamplerChain> chain = Ref<LlamaSamplerChain>());
 
     // ── Getters / Setters ─────────────────────────────────────────────────────
-    void   set_model_path(String path)      { _model_path = path; }
-    String get_model_path() const           { return _model_path; }
+    void   set_model_path(String path)  { _model_path = path; }
+    String get_model_path() const       { return _model_path; }
 
-    void set_max_tokens(int n)              { _max_tokens = n; }
-    int  get_max_tokens() const             { return _max_tokens; }
+    void set_max_tokens(int n)          { _max_tokens = n; }
+    int  get_max_tokens() const         { return _max_tokens; }
 
-    void  set_top_k(int n)                  { _top_k = n; }
-    int   get_top_k() const                 { return _top_k; }
+    /// The server-level default sampler chain. Must be set before calling
+    /// generate() or generate_sync() without an explicit chain argument.
+    void                   set_default_sampler_chain(Ref<LlamaSamplerChain> chain) { _default_sampler_chain = chain; }
+    Ref<LlamaSamplerChain> get_default_sampler_chain() const                       { return _default_sampler_chain; }
 
-    void  set_top_p(float p)                { _top_p = p; }
-    float get_top_p() const                 { return _top_p; }
-
-    void  set_temperature(float t)          { _temperature = t; }
-    float get_temperature() const           { return _temperature; }
-
-    void  set_penalty_last_n(int n)         { _penalty_last_n = n; }
-    int   get_penalty_last_n() const        { return _penalty_last_n; }
-
-    void  set_penalty_repeat(float p)       { _penalty_repeat = p; }
-    float get_penalty_repeat() const        { return _penalty_repeat; }
-
-    void   set_system_prompt(String p)      { _system_prompt = p; }
-    String get_system_prompt() const        { return _system_prompt; }
+    void   set_system_prompt(String p)  { _system_prompt = p; }
+    String get_system_prompt() const    { return _system_prompt; }
 };
 
 } // namespace godot

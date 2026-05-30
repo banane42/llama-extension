@@ -29,14 +29,14 @@ LlamaServer::~LlamaServer() {
 void LlamaServer::_bind_methods() {
 
     // Model lifecycle
-    ClassDB::bind_method(D_METHOD("load_model", "model_path", "n_gpu_layers", "n_ctx"), 
+    ClassDB::bind_method(D_METHOD("load_model", "model_path", "n_gpu_layers", "n_ctx"),
         &LlamaServer::load_model, DEFVAL(-1), DEFVAL(0));
-    ClassDB::bind_method(D_METHOD("unload_model"),             &LlamaServer::unload_model);
-    ClassDB::bind_method(D_METHOD("is_model_loaded"),          &LlamaServer::is_model_loaded);
+    ClassDB::bind_method(D_METHOD("unload_model"),    &LlamaServer::unload_model);
+    ClassDB::bind_method(D_METHOD("is_model_loaded"), &LlamaServer::is_model_loaded);
 
-    // Generation
-    ClassDB::bind_method(D_METHOD("generate", "prompt"),       &LlamaServer::generate);
-    ClassDB::bind_method(D_METHOD("generate_sync", "prompt"),  &LlamaServer::generate_sync);
+    // Generation — chain argument is optional (null = use server default)
+    ClassDB::bind_method(D_METHOD("generate",      "prompt", "chain"), &LlamaServer::generate,      DEFVAL(Ref<LlamaSamplerChain>()));
+    ClassDB::bind_method(D_METHOD("generate_sync", "prompt", "chain"), &LlamaServer::generate_sync, DEFVAL(Ref<LlamaSamplerChain>()));
 
     // Signals
     ADD_SIGNAL(MethodInfo("generation_completed", PropertyInfo(Variant::STRING, "text")));
@@ -45,50 +45,34 @@ void LlamaServer::_bind_methods() {
     // ── Properties ─────────────────────────────────────────────────────────────
 
     // Model config
-    ClassDB::bind_method(D_METHOD("set_model_path", "path"),   &LlamaServer::set_model_path);
-    ClassDB::bind_method(D_METHOD("get_model_path"),           &LlamaServer::get_model_path);
-    ADD_PROPERTY(PropertyInfo(Variant::STRING, "model_path", PROPERTY_HINT_FILE, "*.gguf"),
-                 "set_model_path", "get_model_path");
+    ClassDB::bind_method(D_METHOD("set_model_path", "path"), &LlamaServer::set_model_path);
+    ClassDB::bind_method(D_METHOD("get_model_path"),         &LlamaServer::get_model_path);
+    ADD_PROPERTY(PropertyInfo(Variant::STRING, "model_path",
+        PROPERTY_HINT_FILE, "*.gguf"),
+        "set_model_path", "get_model_path");
 
-    ClassDB::bind_method(D_METHOD("set_max_tokens", "n"),      &LlamaServer::set_max_tokens);
-    ClassDB::bind_method(D_METHOD("get_max_tokens"),           &LlamaServer::get_max_tokens);
-    ADD_PROPERTY(PropertyInfo(Variant::INT, "max_tokens"),
-                 "set_max_tokens", "get_max_tokens");
+    ClassDB::bind_method(D_METHOD("set_max_tokens", "n"), &LlamaServer::set_max_tokens);
+    ClassDB::bind_method(D_METHOD("get_max_tokens"),      &LlamaServer::get_max_tokens);
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "max_tokens",
+        PROPERTY_HINT_RANGE, "1,65536"),
+        "set_max_tokens", "get_max_tokens");
 
-    // Sampler config
-    ClassDB::bind_method(D_METHOD("set_top_k", "n"),           &LlamaServer::set_top_k);
-    ClassDB::bind_method(D_METHOD("get_top_k"),                &LlamaServer::get_top_k);
-    ADD_PROPERTY(PropertyInfo(Variant::INT, "top_k"),
-                 "set_top_k", "get_top_k");
-
-    ClassDB::bind_method(D_METHOD("set_top_p", "p"),           &LlamaServer::set_top_p);
-    ClassDB::bind_method(D_METHOD("get_top_p"),                &LlamaServer::get_top_p);
-    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "top_p"),
-                 "set_top_p", "get_top_p");
-
-    ClassDB::bind_method(D_METHOD("set_temperature", "t"),     &LlamaServer::set_temperature);
-    ClassDB::bind_method(D_METHOD("get_temperature"),          &LlamaServer::get_temperature);
-    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "temperature"),
-                 "set_temperature", "get_temperature");
-
-    // Penalty config
-    ClassDB::bind_method(D_METHOD("set_penalty_last_n", "n"),  &LlamaServer::set_penalty_last_n);
-    ClassDB::bind_method(D_METHOD("get_penalty_last_n"),       &LlamaServer::get_penalty_last_n);
-    ADD_PROPERTY(PropertyInfo(Variant::INT, "penalty_last_n"),
-                 "set_penalty_last_n", "get_penalty_last_n");
-
-    ClassDB::bind_method(D_METHOD("set_penalty_repeat", "p"),  &LlamaServer::set_penalty_repeat);
-    ClassDB::bind_method(D_METHOD("get_penalty_repeat"),       &LlamaServer::get_penalty_repeat);
-    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "penalty_repeat"),
-                 "set_penalty_repeat", "get_penalty_repeat");
+    // Default sampler chain — must be assigned before generation
+    ClassDB::bind_method(D_METHOD("set_default_sampler_chain", "chain"), &LlamaServer::set_default_sampler_chain);
+    ClassDB::bind_method(D_METHOD("get_default_sampler_chain"),          &LlamaServer::get_default_sampler_chain);
+    ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "default_sampler_chain",
+        PROPERTY_HINT_RESOURCE_TYPE, "LlamaSamplerChain"),
+        "set_default_sampler_chain", "get_default_sampler_chain");
 
     // System prompt
-    ClassDB::bind_method(D_METHOD("set_system_prompt", "p"),   &LlamaServer::set_system_prompt);
-    ClassDB::bind_method(D_METHOD("get_system_prompt"),        &LlamaServer::get_system_prompt);
-    ADD_PROPERTY(PropertyInfo(Variant::STRING, "system_prompt", PROPERTY_HINT_MULTILINE_TEXT),
-                 "set_system_prompt", "get_system_prompt");
+    ClassDB::bind_method(D_METHOD("set_system_prompt", "p"), &LlamaServer::set_system_prompt);
+    ClassDB::bind_method(D_METHOD("get_system_prompt"),      &LlamaServer::get_system_prompt);
+    ADD_PROPERTY(PropertyInfo(Variant::STRING, "system_prompt",
+        PROPERTY_HINT_MULTILINE_TEXT),
+        "set_system_prompt", "get_system_prompt");
 }
 
+// ── Model lifecycle ────────────────────────────────────────────────────────────
 bool LlamaServer::load_model(String model_path, int n_gpu_layers, int n_ctx) {
     unload_model();
 
@@ -126,9 +110,6 @@ void LlamaServer::unload_model() {
 }
 
 // ── Prompt building ────────────────────────────────────────────────────────────
-// Replaces {prompt} in the system prompt template with the ChatML user turn.
-// The template is model-agnostic — just swap out the system prompt string
-// to match whatever chat format your GGUF expects.
 String LlamaServer::_build_prompt(const String &user_prompt) const {
     String user_turn =
         "<|im_start|>user\n" + user_prompt + "<|im_end|>\n<|im_start|>assistant\n";
@@ -138,8 +119,37 @@ String LlamaServer::_build_prompt(const String &user_prompt) const {
     return result;
 }
 
+// ── Sampler chain resolution ───────────────────────────────────────────────────
+// Priority: per-call override → server default → error.
+// Returns a freshly-built llama_sampler* the caller must free, or nullptr on failure.
+llama_sampler *LlamaServer::_resolve_sampler_chain(const Ref<LlamaSamplerChain> &override_chain) {
+    // 1. Per-call override takes priority.
+    if (override_chain.is_valid()) {
+        llama_sampler *built = override_chain->build();
+        if (built) return built;
+        // build() already pushed a warning — treat as if no override was given
+        // and continue to the server default rather than silently succeeding.
+    }
+
+    // 2. Server default.
+    if (_default_sampler_chain.is_valid()) {
+        llama_sampler *built = _default_sampler_chain->build();
+        if (built) return built;
+    }
+
+    // 3. Nothing usable — hard error.
+    const String msg = _default_sampler_chain.is_null()
+        ? "No sampler chain set. Assign a LlamaSamplerChain to default_sampler_chain "
+          "or pass one directly to generate() / generate_sync()."
+        : "default_sampler_chain is set but build() returned no valid samplers. "
+          "Check that the chain contains at least one sampler.";
+
+    emit_signal("generation_failed", msg);
+    return nullptr;
+}
+
 // ── Core inference ─────────────────────────────────────────────────────────────
-String LlamaServer::_run_inference(const String &prompt) {
+String LlamaServer::_run_inference(const String &prompt, llama_sampler *sampler) {
     if (!_model || !_ctx) return "";
 
     const llama_vocab *vocab = llama_model_get_vocab(_model);
@@ -156,14 +166,6 @@ String LlamaServer::_run_inference(const String &prompt) {
     // Build initial batch
     llama_batch batch = llama_batch_get_one(tokens.data(), tokens.size());
 
-    // Build sampler chain
-    llama_sampler *sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
-    llama_sampler_chain_add(sampler, llama_sampler_init_penalties(_penalty_last_n, _penalty_repeat, 0.0f, 0.0f));
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(_top_k));
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(_top_p, 1));
-    llama_sampler_chain_add(sampler, llama_sampler_init_temp(_temperature));
-    llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
-
     std::string result;
 
     for (int i = 0; i < _max_tokens; i++) {
@@ -179,20 +181,30 @@ String LlamaServer::_run_inference(const String &prompt) {
         batch = llama_batch_get_one(&new_token, 1);
     }
 
-    llama_sampler_free(sampler);
     llama_memory_clear(llama_get_memory(_ctx), true);
 
     return String(result.c_str());
 }
 
 // ── Async generation ───────────────────────────────────────────────────────────
-void LlamaServer::_do_generate(String prompt) {
-    String result = _run_inference(prompt);
+// The chain is resolved on the calling thread (before the worker spawns) so that
+// any resolution error emits generation_failed on the main thread, not the worker.
+void LlamaServer::_do_generate(String prompt, Ref<LlamaSamplerChain> chain) {
+    // chain was already validated by generate() — build the llama_sampler* here
+    // so its lifetime is wholly contained within the worker thread.
+    llama_sampler *sampler = _resolve_sampler_chain(chain);
+    if (!sampler) {
+        _running = false;
+        return;
+    }
+
+    String result = _run_inference(prompt, sampler);
+    llama_sampler_free(sampler);
     call_deferred("emit_signal", "generation_completed", result);
     _running = false;
 }
 
-void LlamaServer::generate(String prompt) {
+void LlamaServer::generate(String prompt, Ref<LlamaSamplerChain> chain) {
     if (!_model) {
         emit_signal("generation_failed", String("Model not loaded"));
         return;
@@ -201,13 +213,34 @@ void LlamaServer::generate(String prompt) {
         emit_signal("generation_failed", String("Already generating"));
         return;
     }
+
+    // Validate the chain on the calling thread before we commit to the worker.
+    // We pass the Ref<> into the thread rather than the raw pointer so the
+    // resource stays alive for the duration of the worker's execution.
+    const Ref<LlamaSamplerChain> &resolved = chain.is_valid() ? chain : _default_sampler_chain;
+    if (resolved.is_null()) {
+        emit_signal("generation_failed",
+            String("No sampler chain set. Assign a LlamaSamplerChain to default_sampler_chain "
+                   "or pass one directly to generate()."));
+        return;
+    }
+
     _running = true;
     if (_worker.joinable()) _worker.join();
-    _worker = std::thread(&LlamaServer::_do_generate, this, prompt);
+    _worker = std::thread(&LlamaServer::_do_generate, this, prompt, resolved);
 }
 
 // ── Sync generation ────────────────────────────────────────────────────────────
-String LlamaServer::generate_sync(String prompt) {
-    if (!_model) return "";
-    return _run_inference(prompt);
+String LlamaServer::generate_sync(String prompt, Ref<LlamaSamplerChain> chain) {
+    if (!_model) {
+        emit_signal("generation_failed", String("Model not loaded"));
+        return "";
+    }
+
+    llama_sampler *sampler = _resolve_sampler_chain(chain);
+    if (!sampler) return "";
+
+    String result = _run_inference(prompt, sampler);
+    llama_sampler_free(sampler);
+    return result;
 }
