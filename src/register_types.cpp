@@ -1,5 +1,4 @@
 #include "register_types.h"
-#include "llama_node.h"
 #include "llama_server.h"
 #include <gdextension_interface.h>
 #include <godot_cpp/core/defs.hpp>
@@ -13,9 +12,6 @@ static LlamaServer *_llama_server = nullptr;
 
 void initialize_llama_module(ModuleInitializationLevel p_level) {
     if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) return;
-
-    // LLama Node
-    ClassDB::register_class<LlamaNode>();
 
     // LLama Server
     ClassDB::register_class<LlamaServer>();
