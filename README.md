@@ -65,26 +65,3 @@ To deploy into a different folder than the default `bin/`:
 .\scripts\deploy.ps1 -ProjectFile "D:\Godot\my-game\project.godot"
 # Restart the Godot editor to reload the extension
 ```
-
-## Using in GDScript
-
-Add a `LlamaNode` node to your scene, then:
-
-```gdscript
-@onready var llm: LlamaNode = $LlamaNode
-
-func _ready():
-    llm.generation_completed.connect(_on_response)
-    llm.generation_failed.connect(func(e): push_error(e))
-
-    var model_path = ProjectSettings.globalize_path("res://models/my_model.gguf")
-    llm.load_model(model_path, 0, 2048)
-
-func ask(prompt: String):
-    llm.generate(prompt, 300)
-
-func _on_response(text: String):
-    print(text)
-```
-
-Models must be in GGUF format.
