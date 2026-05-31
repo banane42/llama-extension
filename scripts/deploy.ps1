@@ -3,8 +3,12 @@ param(
     [string]$ProjectFile,
 
     [string]$Target = "template_debug",
+    [string]$Platform = "windows",
+    [string]$BinDir = "bin",
 
-    [string]$BinDir = "bin"
+    # Pass -Build to compile before deploying (calls build.ps1 with matching args).
+    [switch]$Build,
+    [switch]$Clean   # forwarded to build.ps1 when -Build is set
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,9 +18,20 @@ $Root = Split-Path $PSScriptRoot -Parent
 $ProjectFile = Resolve-Path $ProjectFile -ErrorAction SilentlyContinue
 if (-not $ProjectFile) {
     Write-Error "project.godot not found at the path provided."
+    return
 }
 if ((Split-Path $ProjectFile -Leaf) -ne "project.godot") {
     Write-Error "Provided path does not point to a project.godot file."
+    return
+}
+
+# ── Optional build step ────────────────────────────────────────────────────────
+if ($Build) {
+    $BuildScript = Join-Path $PSScriptRoot "build.ps1"
+    $BuildArgs = @{ Target = $Target; Platform = $Platform }
+    if ($Clean) { $BuildArgs["Clean"] = $true }
+    Write-Host "Running build.ps1 first..." -ForegroundColor Cyan
+    & $BuildScript @BuildArgs
 }
 
 $ProjectDir = Split-Path $ProjectFile -Parent

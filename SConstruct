@@ -17,7 +17,11 @@ env.Append(LIBPATH=[
 ])
 env.Append(LIBS=["llama", "ggml", "ggml-base", "ggml-cpu"])
 
-sources = Glob("src/*.cpp")
+# Redirect object files to a dedicated build cache outside src/
+VariantDir("build/obj", "src/", duplicate=0)
+
+# sources = Glob("src/*.cpp")
+sources = Glob("build/obj/*.cpp")
 library = env.SharedLibrary(
     "demo/bin/libllama_ext{}{}".format(
         env["suffix"], env["SHLIBSUFFIX"]),

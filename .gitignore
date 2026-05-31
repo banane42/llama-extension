@@ -1,4 +1,5 @@
 # ── Build outputs ─────────────────────────────────────────────────────────────
+build/
 demo/bin/*.dll
 demo/bin/*.lib
 demo/bin/*.exp

@@ -1,12 +1,22 @@
 param(
     [string]$Target = "template_debug",
-    [string]$Platform = "windows"
+    [string]$Platform = "windows",
+    [switch]$Clean
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path $PSScriptRoot -Parent
 
 Write-Host "Building llama-extension ($Platform / $Target)..." -ForegroundColor Cyan
+
+# ── Optional clean ─────────────────────────────────────────────────────────────
+if ($Clean) {
+    $ObjDir = Join-Path $Root "build\obj"
+    if (Test-Path $ObjDir) {
+        Write-Host "Cleaning build artifacts: $ObjDir" -ForegroundColor Yellow
+        Remove-Item $ObjDir -Recurse -Force
+    }
+}
 
 $VsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $VsWhere)) {
@@ -23,7 +33,7 @@ if (-not (Test-Path $VsDevCmd)) {
     Write-Error "vcvars64.bat not found at: $VsDevCmd"
 }
 
-$SconsCmd = "scons platform=$Platform target=$Target arch=x86_64"
+$SconsCmd = "scons platform=$Platform target=$Target arch=x86_64 --implicit-cache"
 $Command = "`"$VsDevCmd`" && cd /d `"$Root`" && $SconsCmd"
 
 Write-Host "Invoking: $Command" -ForegroundColor DarkGray
