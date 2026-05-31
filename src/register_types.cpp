@@ -2,6 +2,7 @@
 #include "llama_server.h"
 #include "llama_samplers.h"
 #include "llama_sampler_chain.h"
+#include "llama_conversation.h"
 #include <gdextension_interface.h>
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
@@ -18,6 +19,7 @@ void initialize_llama_module(ModuleInitializationLevel p_level) {
     // Sampler types and chain — registration contained in their own files
     register_sampler_types();
     register_sampler_chain_type();
+    register_conversation_type();
 
     // LLama Server
     ClassDB::register_class<LlamaServer>();

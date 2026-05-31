@@ -5,6 +5,7 @@
 #include <atomic>
 
 #include "llama_sampler_chain.h"
+#include "llama_conversation.h"
 
 struct llama_model;
 struct llama_context;
@@ -70,6 +71,22 @@ public:
     bool load_model(String model_path, int n_gpu_layers = -1, int n_ctx = 0);
     void unload_model();
     bool is_model_loaded() const { return _model != nullptr; }
+
+    // ── Conversation threads ──────────────────────────────────────────────────
+
+    /**
+     * @brief Create a new stateful conversation backed by its own context.
+     *
+     * The returned LlamaConversation inherits the server's current system_prompt,
+     * max_tokens, and default_sampler_chain at the moment of creation. Changes to
+     * the server's settings afterwards do NOT affect existing conversations.
+     *
+     * @param n_ctx  Context window size for this conversation. 0 = model default.
+     *               Each conversation allocates its own KV cache, so be mindful of
+     *               VRAM/RAM when creating many conversations simultaneously.
+     * @return A Ref<LlamaConversation>, or an invalid Ref on failure.
+     */
+    Ref<LlamaConversation> create_conversation(int n_ctx = 0);
 
     // ── Generation ────────────────────────────────────────────────────────────
 

@@ -28,6 +28,10 @@ LlamaServer::~LlamaServer() {
 // ── Bind methods ───────────────────────────────────────────────────────────────
 void LlamaServer::_bind_methods() {
 
+    // Conversation factory
+    ClassDB::bind_method(D_METHOD("create_conversation", "n_ctx"),
+        &LlamaServer::create_conversation, DEFVAL(0));
+
     // Model lifecycle
     ClassDB::bind_method(D_METHOD("load_model", "model_path", "n_gpu_layers", "n_ctx"),
         &LlamaServer::load_model, DEFVAL(-1), DEFVAL(0));
@@ -228,6 +232,29 @@ void LlamaServer::generate(String prompt, Ref<LlamaSamplerChain> chain) {
     _running = true;
     if (_worker.joinable()) _worker.join();
     _worker = std::thread(&LlamaServer::_do_generate, this, prompt, resolved);
+}
+
+// ── Conversation factory ───────────────────────────────────────────────────────
+Ref<LlamaConversation> LlamaServer::create_conversation(int n_ctx) {
+    if (!_model) {
+        emit_signal("generation_failed",
+            String("LlamaServer::create_conversation: model not loaded."));
+        return Ref<LlamaConversation>();
+    }
+
+    Ref<LlamaConversation> conv;
+    conv.instantiate();
+
+    if (!conv->_init(_model, n_ctx, _system_prompt, _max_tokens, _default_sampler_chain)) {
+        // _init already emitted generation_failed on the conversation object;
+        // emit it on the server too so callers that only listen to the server signal
+        // are also notified.
+        emit_signal("generation_failed",
+            String("LlamaServer::create_conversation: context initialisation failed."));
+        return Ref<LlamaConversation>();
+    }
+
+    return conv;
 }
 
 // ── Sync generation ────────────────────────────────────────────────────────────
