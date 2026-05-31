@@ -1,6 +1,6 @@
 # llama-extension
 
-A Godot 4 GDExtension that exposes llama.cpp inference to GDScript via a `LlamaNode` class.
+A Godot 4 GDExtension that exposes llama.cpp inference to GDScript via a `LlamaServer` singleton.
 
 ## Requirements
 
@@ -35,6 +35,19 @@ To build a release version instead of debug:
 .\scripts\build.ps1 -Target template_release
 ```
 
+To clean object files before building (useful when switching targets or after structural changes):
+
+```powershell
+.\scripts\build.ps1 -Clean
+.\scripts\build.ps1 -Target template_release -Clean
+```
+
+The `-Platform` parameter defaults to `windows`. Pass it explicitly if targeting a different platform:
+
+```powershell
+.\scripts\build.ps1 -Platform linux
+```
+
 ## Deploying to a Godot project
 
 Pass the path to your game's `project.godot` file. The script will copy the
@@ -55,6 +68,13 @@ To deploy into a different folder than the default `bin/`:
 
 ```powershell
 .\scripts\deploy.ps1 -ProjectFile "D:\Godot\my-game\project.godot" -BinDir "extensions\llama"
+```
+
+To build and deploy in one step, pass `-Build`. Add `-Clean` to wipe object files first:
+
+```powershell
+.\scripts\deploy.ps1 -ProjectFile "D:\Godot\my-game\project.godot" -Build
+.\scripts\deploy.ps1 -ProjectFile "D:\Godot\my-game\project.godot" -Build -Clean -Target template_release
 ```
 
 ## Typical workflow
